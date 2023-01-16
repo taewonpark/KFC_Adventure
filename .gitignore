@@ -1,3 +1,4 @@
 outputs/
 lightning_logs/
 milestone0/data/
+**/__pycache__/
