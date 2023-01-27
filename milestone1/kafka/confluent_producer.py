@@ -40,7 +40,6 @@ if __name__ == '__main__':
         record_value = json.dumps({'count': n})
         print("Producing record: {}\t{}".format(record_key, record_value))
         producer.produce(topic, key=record_key, value=record_value, on_delivery=acked)
-        # producer.send(topic, key=record_key, value=record_value, on_delivery=acked)
         # p.poll() serves delivery reports (on_delivery)
         # from previous produce() calls.
         producer.poll(0)
