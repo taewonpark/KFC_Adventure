@@ -1,36 +1,62 @@
 import os
-from google.cloud import speech
-import numpy as np
+from google.cloud import language_v1
+import six
 import ccloud_lib
-from confluent_kafka import DeserializingConsumer, Producer
+from confluent_kafka import Consumer, Producer
 
-# Setup GCP
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "/Users/jyk/.ssh/tchang3_speech_to_text.json"
-speech_client = speech.SpeechClient()
 
 # Setup Confluent
 config_file = "/Users/jyk/.confluent/python.config"
 
+
 # Create Consumer instance
 conf = ccloud_lib.read_ccloud_config(config_file)
-consumer_topic = 'speech_topic'
+consumer_topic = 'text_topic'
 consumer_conf = ccloud_lib.pop_schema_registry_params_from_config(conf)
 consumer_conf['group.id'] = 'server'
 consumer_conf['auto.offset.reset'] = 'earliest'
-consumer_conf['value.deserializer'] = ccloud_lib.json_deserializer
-consumer = DeserializingConsumer(consumer_conf)
+consumer = Consumer(consumer_conf)
 # Subscribe to topic
 consumer.subscribe([consumer_topic])
 
 # Create Producer instance
 conf = ccloud_lib.read_ccloud_config(config_file)
-producer_topic = 'text_topic'
+producer_topic = 'sentiment_topic'
 producer_conf = ccloud_lib.pop_schema_registry_params_from_config(conf)
-# producer_conf['value.serializer'] = ccloud_lib.json_serializer
 producer = Producer(producer_conf)
-# Create topic if needed
 ccloud_lib.create_topic(conf, producer_topic)
 
+def sample_analyze_sentiment(content, critical_value):
+
+    client = language_v1.LanguageServiceClient()
+
+    # content = 'Your text to analyze, e.g. Hello, world!'
+
+    if isinstance(content, six.binary_type):
+        content = content.decode("utf-8")
+
+    type_ = language_v1.Document.Type.PLAIN_TEXT
+    document = {"type_": type_, "content": content}
+
+    response = client.analyze_sentiment(request={"document": document})
+    sentiment = response.document_sentiment
+
+    score = sentiment.score
+    mag = sentiment.magnitude
+    print("Score: {}".format(sentiment.score))
+    print("Magnitude: {}".format(sentiment.magnitude))
+
+    if score > critical_value :
+        result = "positive"
+    elif score < (-1.0 * critical_value) :
+        result = "negative"
+    else :
+        result = "neutral_or_mixed"
+    
+    return result
+
+k = 0.25   # critical value
 
 # Run with Confluent
 total_count = 0
@@ -47,31 +73,14 @@ try:
         elif msg.error():
             print('error: {}'.format(msg.error()))
         else:
-            message = msg.value()
-            print(message)
+            sentence = msg.value()
+            print('sentence', sentence)
 
-            # list -> bytearray
-            byte_data_wav = np.array(message['data']).tobytes()
-
-            audio_wav = speech.RecognitionAudio(content=byte_data_wav)
-
-            config_wav = speech.RecognitionConfig(
-                sample_rate_hertz=16000,
-                enable_automatic_punctuation=True,
-                language_code='en-US',
-                encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            )
-
-            response_standard_wav = speech_client.recognize(
-                config=config_wav,
-                audio=audio_wav
-            )
-
-            print(response_standard_wav)
+            sentiment = sample_analyze_sentiment(sentence, k)
+            print(sentiment)
 
             # produce 
-            producer.produce(producer_topic, value=bytes(response_standard_wav.results[0].alternatives[0].transcript, 'utf-8'))
-            print(response_standard_wav.results[0].alternatives[0].transcript)
+            producer.produce(producer_topic, value=bytes(sentiment, 'utf-8'))
             producer.flush()
 
 except KeyboardInterrupt:

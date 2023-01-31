@@ -1,5 +1,4 @@
 import time, logging
-from datetime import datetime
 import threading, collections, queue, os, os.path
 import numpy as np
 import pyaudio
@@ -7,11 +6,8 @@ import wave
 import webrtcvad
 from halo import Halo
 from scipy import signal
-from kafka import KafkaProducer
-import json
-from bson import json_util
 import ccloud_lib
-from confluent_kafka import Producer
+from confluent_kafka import SerializingProducer
 
 logging.basicConfig(level=20)
 
@@ -187,15 +183,11 @@ def main(ARGS):
             conf = ccloud_lib.read_ccloud_config(config_file)
             producer_conf = ccloud_lib.pop_schema_registry_params_from_config(conf)
 
-            producer = Producer(producer_conf)
+            producer_conf['value.serializer'] = ccloud_lib.json_serializer
+
+            producer = SerializingProducer(producer_conf)
             # Create topic if needed
             ccloud_lib.create_topic(conf, topic)
-
-            # producer = KafkaProducer(
-            #     bootstrap_servers=['localhost:9092'],
-            #     api_version=(2,0,2),
-            #     value_serializer=lambda v: json.dumps(v).encode('utf-8')
-            # )
 
             data_json = {
                 'data' : np.frombuffer(wav_data).tolist(),
@@ -203,19 +195,10 @@ def main(ARGS):
                 'sampwidth': 2,
                 'n_channel': 1
             }
-            # np.array(data).tobytes()
-            # np.frombuffer(d).tobytes() == d
 
             # output 보내기
             producer.produce(topic, key=b'wav', value=data_json)
-            # producer.send('speech_topic',
-            #         key=b'wav',
-            #         # json.dumps(data_json, default=json_util.default).encode('utf-8')
-            #         # value=bytes(json.dumps(data_json).encode('utf-8'))
-            #         value=data_json
-            #     )
             producer.flush()
-            # vad_audio.write_wav(os.path.join(ARGS.savewav, datetime.now().strftime("savewav_%Y-%m-%d_%H-%M-%S_%f.wav")), wav_data)
             wav_data = bytearray()
 
 if __name__ == '__main__':
@@ -228,9 +211,9 @@ if __name__ == '__main__':
                         help="Set aggressiveness of VAD: an integer between 0 and 3, 0 being the least aggressive about filtering out non-speech, 3 the most aggressive. Default: 3")
     parser.add_argument('--nospinner', action='store_true',
                         help="Disable spinner")
-    parser.add_argument('-w', '--savewav',
+    parser.add_argument('-w', '--savewav', default='tmp',
                         help="Save .wav files of utterences to given directory")
-    parser.add_argument('-f', '--file',
+    parser.add_argument('-f', '--file', 
                         help="Read from .wav file instead of microphone")
 
     parser.add_argument('-d', '--device', type=int, default=None,

@@ -25,6 +25,7 @@ import argparse, sys
 from confluent_kafka import avro, KafkaError
 from confluent_kafka.admin import AdminClient, NewTopic
 from uuid import uuid4
+import json
 
 #import certifi
 
@@ -184,3 +185,9 @@ def create_topic(conf, topic):
             if e.args[0].code() != KafkaError.TOPIC_ALREADY_EXISTS:
                 print("Failed to create topic {}: {}".format(topic, e))
                 sys.exit(1)
+
+def json_serializer(msg, s_obj):
+    return json.dumps(msg).encode('utf-8')
+
+def json_deserializer(msg, s_obj):
+    return json.loads(msg.decode('utf-8'))
