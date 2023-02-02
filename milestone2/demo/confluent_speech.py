@@ -181,13 +181,12 @@ def main(ARGS):
             config_file = "/home/pi/.confluent/python.config"
             topic = "speech_topic"
             conf = ccloud_lib.read_ccloud_config(config_file)
+            ccloud_lib.create_topic(conf, topic)
             producer_conf = ccloud_lib.pop_schema_registry_params_from_config(conf)
 
             producer_conf['value.serializer'] = ccloud_lib.json_serializer
 
             producer = SerializingProducer(producer_conf)
-            # Create topic if needed
-            ccloud_lib.create_topic(conf, topic)
 
             data_json = {
                 'data' : np.frombuffer(wav_data).tolist(),
@@ -224,3 +223,4 @@ if __name__ == '__main__':
     ARGS = parser.parse_args()
     os.makedirs(ARGS.savewav, exist_ok=True)
     main(ARGS)
+    
