@@ -31,25 +31,15 @@ def change_color(pixels, a, date):
     """
     week, w_day = pixels._monthday_to_index(date)
     pixels.axs[week][w_day].set_facecolor('red')
-    a.pyplot()
 
+ 
 def insert_text(pixels, a, date, text):
     """
     date: int ex) 14, 28 
     text: "happy"
     """
     week, w_day = pixels._monthday_to_index(date)
-    pixels.events[week][w_day].append(text)
-    
-                
-    contents = "\n".join(pixels.events[week][w_day])
-    
-    pixels.axs.text(.03, .85, contents,
-            verticalalignment='top',
-            horizontalalignment='left',
-            fontsize=9)
-                
-    a.pyplot()
+    pixels.axs[week][w_day].text(0.05, 0.08, s='#'+text)  # axis ㅡ ㅣ
 
 def main():
 
@@ -93,8 +83,11 @@ def main():
             change_color(pixels, a, today.day)
             
             # TODO: perform keyword_extraction, write text
-            # insert_text(pixels, a, today.day, '#theGlory')
-
+            insert_text(pixels, a, today.day, 'exciting')
+            
+            # Modify plot
+            a.pyplot()
+            
     st.write("* * *")
     st.header("Result")
 
