@@ -77,7 +77,7 @@ class CobraDemo(Thread):
     def run_kafka(self):
         try:
             while True:
-                msg = self.consumer.poll(1.0)
+                msg = self.consumer.poll(0.1)
                 if msg is None:
                     continue
                 elif msg.error():
@@ -147,7 +147,7 @@ class CobraDemo(Thread):
                 count += 1
                 # consume message
                 if count % count_threshold == 0:
-                    msg = self.consumer.poll(1.0)
+                    msg = self.consumer.poll(0.1)
                     if msg is None:
                         continue
                     elif msg.error():
