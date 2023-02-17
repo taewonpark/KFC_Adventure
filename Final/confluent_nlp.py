@@ -23,6 +23,16 @@ from transformers import TokenClassificationPipeline, AutoModelForTokenClassific
 from transformers.pipelines import AggregationStrategy
 
 # os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "/Users/jyk/.ssh/tchang3_speech_to_text.json"
+
+emotion_map = {
+    0:'sadness',
+    1:'joy',
+    2:'love',
+    3:'anger',
+    4:'fear',
+    5:'surprise',
+}
+
 if torch.cuda.is_available():       
     device = torch.device("cuda")
     print(f'There are {torch.cuda.device_count()} GPU(s) available.')
@@ -68,6 +78,7 @@ class Kafka:
         producer_conf = ccloud_lib.pop_schema_registry_params_from_config(conf)
         self.producer = Producer(producer_conf)
         ccloud_lib.create_topic(conf, self.producer_topic)
+        # ccloud_lib.create_topic(conf, 'web_topic')
 
 class EmotionModel:
     def __init__(self, model_type):
@@ -109,10 +120,10 @@ def run_kafka(keyword_extractor):
     my_model = EmotionModel("bert")
     
     total_count = 0
-    nlp_result = {'emotion':None, 'keywords':None}
+    nlp_result = {'text':None, 'emotion':None, 'keywords':None}
     try:
         while True:
-            msg = my_kafka.consumer.poll(1.0)
+            msg = my_kafka.consumer.poll(0.1)
             if msg is None:
                 # No message available within timeout.
                 # Initial message consumption may take up to
@@ -126,7 +137,8 @@ def run_kafka(keyword_extractor):
                 sentence = msg.value()
                 if isinstance(sentence, six.binary_type):
                     sentence = sentence.decode("utf-8")
-                print('Received text: ', sentence)
+                nlp_result['text'] = sentence
+                print('Text: ', sentence)
                 print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                 if my_model.model_type == "bert":
                     sentence_tokenized = my_model.tokenizer(sentence, return_tensors="pt").to(device)
@@ -134,7 +146,11 @@ def run_kafka(keyword_extractor):
                     nlp_result['emotion'] = torch.argmax(output.logits[0]).item()
                 elif my_model.model_type == "t5":
                     nlp_result['emotion'] = my_model.model.predict(sentence)[0]
-                nlp_result['keywords'] = keyword_extractor(sentence).tolist()
+                keyword_result = keyword_extractor(sentence).tolist()
+                if len(keyword_result) == 0:
+                    nlp_result['keywords'] = "None"
+                else:
+                    nlp_result['keywords'] = keyword_result[0]
                 print("Emotion: ", nlp_result['emotion'])
                 print("Keywords: ", nlp_result['keywords'])
 
@@ -142,7 +158,7 @@ def run_kafka(keyword_extractor):
                 print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                 json_result = json.dumps(nlp_result)
                 my_kafka.producer.produce(my_kafka.producer_topic, value=json_result)
-                # my_kafka.producer.produce(my_kafka.producer_topic, value=bytes(json_result, 'utf-8'))
+                # my_kafka.producer.produce('web_topic', value=json_result)
                 my_kafka.producer.flush()
 
     except KeyboardInterrupt:
@@ -152,27 +168,35 @@ def run_kafka(keyword_extractor):
         my_kafka.consumer.close()
         
 if __name__=="__main__":
-    # emotion_model = load_t5_emotion_model()
     keyword_extractor = load_keyword_extractor()
-    # print(dir(emotion_model))
     
-#     sentence = "Here is where Artificial Intelligence comes in. Currently, classical machine learning methods, that use statistical and linguistic features, are widely used for the extraction process."
+#     sentences = ["I'm scared when I bumped into some deers in Schenley park at night.",
+# "I love watching the design of the Fence in CMU changing day by day",
+# "Since I slept until noon, I failed to attend the machine learning course team meeting.",
+# "I expected the sunny weather in D.C. today but unfortunately weather was so too bad.",
+# "I ate Chinese soup near University of Pittsburgh and it was too expensive.",
+# "I was shocked by the color of sky today. It resembles the burning fire."]
     
-#     start = time.time()
-#     sentence_tokenized = tokenizer(sentence, return_tensors="pt").to(device)
-#     # sentence_tokenized = tokenizer(sentence, padding=True, truncation=True)
-#     # input_ids = torch.tensor([input_ids_list], dtype=torch.long).to(device)
-#     # print(dir(sentence_tokenized))
-#     # sentence_tokenized.set_format("torch", columns=["input_ids", "attention_mask"])
+#     emotions = []
+#     keywords = []
+#     my_model = EmotionModel("bert")
+    
+#     for sentence in sentences:
+#         sentence_tokenized = my_model.tokenizer(sentence, return_tensors="pt").to(device)
+#         output = my_model.model(**sentence_tokenized)
+#         emotions.append(emotion_map[torch.argmax(output.logits[0]).item()])
+#         # print("Emotion: ", emotion)
 
-#     emotion = emotion_model(**sentence_tokenized)
-#     print("Emotion: ", emotion)
-#     print(f"Elasped {time.time() - start}")
+#         keyphrases = keyword_extractor(sentence)
+#         keywords.append(keyphrases)
+#         # print("Keyphrases: ", keyphrases)
     
-#     start = time.time()    
-#     keyphrases = keyword_extractor(sentence)
-#     print("Keyphrases: ", keyphrases)
-#     print(f"Elasped {time.time() - start}")
+#     result_dict = {'text':sentences,
+#                   'emotion':emotions,
+#                   'keyword':keywords,
+#                   }
+#     result_df = pd.DataFrame(result_dict)
+#     result_df.to_csv('./result.csv')
     
     run_kafka(keyword_extractor)
     
