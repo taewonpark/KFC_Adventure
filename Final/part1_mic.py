@@ -50,7 +50,7 @@ class CobraDemo(Thread):
         self._frame_length = 512
 
         # Setup Confluent
-        config_file = "/home/pi/.confluent/python.config"
+        config_file = "./python.config"
 
         # Create Consumer instance
         conf = ccloud_lib.read_ccloud_config(config_file)
@@ -77,7 +77,7 @@ class CobraDemo(Thread):
     def run_kafka(self):
         try:
             while True:
-                msg = self.consumer.poll(1.0)
+                msg = self.consumer.poll(0.1)
                 if msg is None:
                     continue
                 elif msg.error():
@@ -93,6 +93,27 @@ class CobraDemo(Thread):
         finally:
             self.consumer.close()
 
+    def run_STT(self, wav_data):
+        byte_data_wav = np.array(wav_data).tobytes()
+
+        audio_wav = speech.RecognitionAudio(content=byte_data_wav)
+
+        config_wav = speech.RecognitionConfig(
+            sample_rate_hertz=16000,
+            enable_automatic_punctuation=True,
+            language_code='en-US',
+            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+        )
+
+        response_standard_wav = speech_client.recognize(
+            config=config_wav,
+            audio=audio_wav
+        )
+
+        print(response_standard_wav)
+
+        return response_standard_wav
+
     def run(self):
         """
          Creates an input audio stream, instantiates an instance of Cobra object, and monitors the audio stream for
@@ -107,6 +128,7 @@ class CobraDemo(Thread):
         count_threshold = 50
         button_flag = 'stop'
         record_finish = False
+        sentences = []
 
         try:
             cobra = pvcobra.create(
@@ -123,8 +145,9 @@ class CobraDemo(Thread):
 
             while True:
                 count += 1
+                # consume message
                 if count % count_threshold == 0:
-                    msg = self.consumer.poll(1.0)
+                    msg = self.consumer.poll(0.1)
                     if msg is None:
                         continue
                     elif msg.error():
@@ -145,25 +168,7 @@ class CobraDemo(Thread):
                     from datetime import datetime; print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
                     if len(wav_data) > 0:
-                        # list -> bytearray
-                        # byte_data_wav = np.array(message['data']).tobytes()
-                        byte_data_wav = np.array(wav_data).tobytes()
-
-                        audio_wav = speech.RecognitionAudio(content=byte_data_wav)
-
-                        config_wav = speech.RecognitionConfig(
-                            sample_rate_hertz=16000,
-                            enable_automatic_punctuation=True,
-                            language_code='en-US',
-                            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                        )
-
-                        response_standard_wav = speech_client.recognize(
-                            config=config_wav,
-                            audio=audio_wav
-                        )
-
-                        print(response_standard_wav)
+                        response_standard_wav = self.run_STT(wav_data)
 
                         # produce 
                         try : 
@@ -172,58 +177,38 @@ class CobraDemo(Thread):
                             result = None
 
                         if result is not None:
-                            from datetime import datetime; print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-                            self.producer.produce(self.producer_topic, value=bytes(result, 'utf-8'))
+                            sentences.append(result)
                             print(result)
-                            print(self.producer_topic, 'sent something')
-                            self.producer.flush()
+                    
+                    # produce sentences
+                    sentences = ' '.join(sentences)
+                    self.producer.produce(self.producer_topic, value=bytes(sentences, 'utf-8'))        
+                    print(self.producer_topic, sentences)
+                    self.producer.flush()
 
                     recorder.start()
                     wav_data = bytearray()
+                    sentences = []
 
                 elif voice_probability > 0.8 and button_flag == 'start':
                     wav_data.extend(struct.pack("h" * len(pcm), *pcm))
                     stack = 0
                 elif voice_probability <= 0.8 and len(wav_data) > 0 and stack > stack_threshold and button_flag == 'start':
                     recorder.stop()
-                    from datetime import datetime; print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+                    response_standard_wav = self.run_STT(wav_data)
 
-                    # list -> bytearray
-                    # byte_data_wav = np.array(message['data']).tobytes()
-                    byte_data_wav = np.array(wav_data).tobytes()
-
-                    audio_wav = speech.RecognitionAudio(content=byte_data_wav)
-
-                    config_wav = speech.RecognitionConfig(
-                        sample_rate_hertz=16000,
-                        enable_automatic_punctuation=True,
-                        language_code='en-US',
-                        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                    )
-
-                    response_standard_wav = speech_client.recognize(
-                        config=config_wav,
-                        audio=audio_wav
-                    )
-
-                    print(response_standard_wav)
-
-                    # produce 
                     try : 
                         result = response_standard_wav.results[0].alternatives[0].transcript
                     except: 
                         result = None
 
+                    # update result list
                     if result is not None:
-                        from datetime import datetime; print(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-                        self.producer.produce(self.producer_topic, value=bytes(result, 'utf-8'))
+                        sentences.append(result)
                         print(result)
-                        print(self.producer_topic, 'sent something')
-                        self.producer.flush()
 
                     recorder.start()
                     wav_data = bytearray()
-
                 else:
                     if len(wav_data) > 0 and button_flag == 'start':
                         stack += 1
