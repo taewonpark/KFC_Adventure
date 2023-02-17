@@ -142,7 +142,7 @@ TODAY = date.today()
 INITIAL_STATE = {"Message": "", "Records": records, "Year": TODAY.year, "Month": TODAY.month, "Finish": False, "Stop_flag": False, "play_record_text": "", "Title": "", "Content": "", "Keyword": ""}
 
 # Setup Confluent
-config_file = "/Users/gubo/Downloads/python.config"
+config_file = "confluent_kafka.config"  #TODO: path to 'confluent_kafka.config'
 # Create Producer instance
 conf = ccloud_lib.read_ccloud_config(config_file)
 producer_topic = 'button_topic'

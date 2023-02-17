@@ -30,7 +30,7 @@ idx_emotion = {
 }
 
 # Setup Confluent
-config_file = "./python.config"
+config_file = "confluent_kafka.config"  #TODO: path to 'confluent_kafka.config'
 
 # Create Consumer instance
 conf = ccloud_lib.read_ccloud_config(config_file)

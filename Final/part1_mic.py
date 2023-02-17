@@ -19,7 +19,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # Setup GCP
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "/home/pi/GCPkey/tchang3_speech_to_text.json"
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "gcp_key.json"  #TODO: path to 'gcp key'
 speech_client = speech.SpeechClient()
 
 
@@ -248,7 +248,7 @@ def main():
 
     parser.add_argument('--access_key',
                         help='AccessKey provided by Picovoice Console (https://console.picovoice.ai/)',
-                        default='JRL2ZWlEuptk0rxFFyfyxGDN7Lmwxll/Q7XFeXc6vbVzJvk+PEI7lg==')
+                        default='acess_key')# TODO: access key for Picovoice
 
     parser.add_argument('--audio_device_index',
                         help='Index of input audio device.', type=int, default=-1)
